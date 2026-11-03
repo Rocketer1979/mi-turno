@@ -279,7 +279,9 @@ input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px;}
 .listbtn.danger{color:var(--bad);} .listbtn.danger .ic{background:color-mix(in srgb,var(--bad) 14%,transparent);}
 .listbtn .sw{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;flex:none;font-weight:800;font-size:.8rem;}
 .profile{display:flex;align-items:center;gap:14px;width:100%;text-align:left;color:var(--ink);font-size:1rem;}
-.avatar{width:52px;height:52px;border-radius:50%;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font-weight:800;font-size:1.3rem;flex:none;}
+.avatar{width:52px;height:52px;border-radius:50%;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font-weight:800;font-size:1.3rem;flex:none;overflow:hidden;}
+.avatar img{width:100%;height:100%;object-fit:cover;display:block;}
+.avatar.big{width:88px;height:88px;font-size:2.2rem;}
 .profile .t{flex:1;} .profile .t b{display:block;font-size:1.05rem;} .profile .t small{color:var(--muted);font-size:.8rem;}
 .about{text-align:center;color:var(--faint);font-size:.74rem;margin:20px 0 6px;}
 .about img{width:56px;height:56px;border-radius:14px;display:block;margin:0 auto 8px;}
@@ -626,6 +628,17 @@ nav.tabbar button.active .pillbg{background:color-mix(in srgb,var(--accent) 22%,
   <div class="phead"><button class="back">‹ Ajustes</button><h2>Perfil</h2><span class="saved">✓ Guardado</span></div>
   <div class="pbody">
     <div class="card">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:8px">
+        <span class="avatar big" id="pf-photo">?</span>
+        <div style="flex:1">
+          <label class="btn sec" style="margin-top:0;cursor:pointer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+            <span id="pf-file-txt">Poner foto</span><input type="file" id="pf-file" accept="image/*" class="hidden">
+          </label>
+          <button class="btn danger hidden" id="pf-del" style="margin-top:8px;padding:10px;font-size:.9rem">Quitar foto</button>
+        </div>
+      </div>
+      <p class="note" style="margin-top:0">Una foto tuya, el logo de la empresa o la imagen que quieras.</p>
       <label class="field"><span class="lab">Tu nombre</span><input id="pf-in-name" maxlength="40" placeholder="Ej. Joan" autocomplete="off"></label>
       <label class="field"><span class="lab">Empresa</span><input id="pf-in-company" maxlength="60" placeholder="Ej. Mi empresa S.L." autocomplete="off"></label>
       <p class="note">Aparece en la app y en las imágenes que compartas del calendario.</p>
@@ -877,7 +890,7 @@ nav.tabbar button.active .pillbg{background:color-mix(in srgb,var(--accent) 22%,
 <script>
 "use strict";
 const STORE_KEY="miturno_v1";
-const VERSION="3.5";
+const VERSION="3.6";
 const MONTHS=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const DOW=["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
 const DOW_S=["D","L","M","X","J","V","S"];
@@ -1593,7 +1606,7 @@ function renderYear(){
 // ---- Ajustes ----
 function renderSettings(){
   const p=data.profile;
-  $("avatar").textContent=(p.name||"?").trim().charAt(0).toUpperCase()||"?";
+  $("avatar").innerHTML=avatarHTML();
   $("pf-name").textContent=p.name||"Tu perfil";
   $("pf-company").textContent=p.company||(p.name?"Añade tu empresa":"Toca para poner tu nombre y empresa");
   const c=data.cfg, pend=pendingPluses().length;
@@ -1642,10 +1655,36 @@ function bindNum(id,get,set){const el=$(id); el.value=get()??""; el.oninput=()=>
 function bindText(id,get,set){const el=$(id); el.value=get()??""; el.oninput=()=>{set(el.value.trim());changed();};}
 function bindCheck(id,get,set,after){const el=$(id); el.checked=!!get(); el.onchange=()=>{set(el.checked);changed();buzz();after&&after();};}
 
-function renderPerfil(){
-  bindText("pf-in-name",()=>data.profile.name,v=>data.profile.name=v);
-  bindText("pf-in-company",()=>data.profile.company,v=>data.profile.company=v);
+function avatarHTML(){
+  const p=data.profile;
+  if(p.photo&&/^data:image\/(jpeg|png|webp);base64,/.test(p.photo)) return `<img src="${esc(p.photo)}" alt="">`;
+  return esc((p.name||"?").trim().charAt(0).toUpperCase()||"?");
 }
+function renderPerfil(){
+  bindText("pf-in-name",()=>data.profile.name,v=>{data.profile.name=v;if(!data.profile.photo)$("pf-photo").innerHTML=avatarHTML();});
+  bindText("pf-in-company",()=>data.profile.company,v=>data.profile.company=v);
+  $("pf-photo").innerHTML=avatarHTML();
+  $("pf-del").classList.toggle("hidden",!data.profile.photo);
+  $("pf-file-txt").textContent=data.profile.photo?"Cambiar foto":"Poner foto";
+}
+// La foto se recorta en cuadrado y se reduce a 256 px para que ocupe poco en el móvil
+$("pf-file").onchange=e=>{
+  const f=e.target.files[0]; e.target.value=""; if(!f) return;
+  const url=URL.createObjectURL(f), img=new Image();
+  img.onload=()=>{
+    const S=256, s=Math.min(img.naturalWidth,img.naturalHeight), cv=document.createElement("canvas");
+    cv.width=cv.height=S;
+    cv.getContext("2d").drawImage(img,(img.naturalWidth-s)/2,(img.naturalHeight-s)/2,s,s,0,0,S,S);
+    URL.revokeObjectURL(url);
+    data.profile.photo=cv.toDataURL("image/jpeg",0.85); changed(); renderPerfil(); buzz(12); toast("Foto guardada");
+  };
+  img.onerror=()=>{URL.revokeObjectURL(url);toast("No se ha podido abrir esa imagen");};
+  img.src=url;
+};
+$("pf-del").onclick=async()=>{
+  if(!await ask("¿Quitar la foto?","Volverá a salir la inicial de tu nombre.","Quitar",true)) return;
+  delete data.profile.photo; changed(); renderPerfil();
+};
 function renderSalario(){
   const c=data.cfg;
   const mode=()=>{document.querySelectorAll("#payMode button").forEach(b=>b.classList.toggle("on",b.dataset.m===c.payMode));

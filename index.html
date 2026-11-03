@@ -123,14 +123,22 @@ section{animation:fade .22s ease;}
 .day.today{border-color:var(--accent);}
 .day.today .num{color:var(--accent);}
 .day.has{background:color-mix(in srgb,var(--c) 24%,var(--surface2));}
+/* Día con imagen del turno: la foto rellena la casilla y el número va encima */
+.day.img{background:linear-gradient(rgba(0,0,0,.12),rgba(0,0,0,.28)),var(--im) center/cover;}
+.day.img .num,.day.img.weekend .num{color:#fff;font-size:1.12rem;font-weight:800;text-shadow:0 1px 3px rgba(0,0,0,.85),0 0 10px rgba(0,0,0,.45);}
+.day.img.fest .num{color:#ff8a8a;}
+.day.img.today .num{color:var(--accent);}
+.day.img .ot{color:#7dffbe;text-shadow:0 1px 2px #000;}
 .day .tag{font-size:.56rem;font-weight:800;line-height:1;padding:2px 5px;border-radius:5px;background:var(--c);color:var(--tc);max-width:90%;overflow:hidden;}
 .day.cancel{opacity:.45;}
 .day.cancel::after{content:"";position:absolute;width:64%;height:2px;background:var(--bad);transform:rotate(-24deg);border-radius:2px;}
 .day.extra::before{content:"★";position:absolute;top:2px;right:4px;font-size:.55rem;color:var(--accent);}
 .day .ot{position:absolute;top:2px;left:4px;font-size:.55rem;font-weight:800;color:var(--ok);}
 .day .dot{position:absolute;bottom:4px;width:4px;height:4px;border-radius:50%;background:var(--muted);}
-.legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:14px;font-size:.7rem;color:var(--muted);}
-.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px;font-style:normal;}
+.legend{display:flex;gap:8px 14px;flex-wrap:wrap;margin-top:14px;font-size:.76rem;color:var(--muted);align-items:center;}
+.legend span{display:inline-flex;align-items:center;}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;font-style:normal;text-align:center;line-height:12px;}
+.legend i.pic{width:26px;height:26px;border-radius:7px;background-size:cover;background-position:center;}
 .caltools{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px;}
 .caltools .btn{margin-top:0;padding:11px;font-size:.86rem;}
 
@@ -330,6 +338,7 @@ nav.tabbar button.active .pillbg{background:color-mix(in srgb,var(--accent) 22%,
 .turnsel button .sh{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;font-size:.78rem;font-weight:800;background:var(--c);color:var(--tc);}
 .turnsel button span.n{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 4px;}
 .turnsel button.sel{border-color:var(--c);background:color-mix(in srgb,var(--c) 22%,var(--surface2));}
+.turnsel button .sh.pic{background-size:cover;background-position:center;color:#fff;text-shadow:0 1px 3px #000;}
 .turnsel button.free .sh{background:var(--surface3);color:var(--faint);}
 .turnsel button.free.sel{border-color:var(--faint);}
 .togglerow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 0;border-top:1px solid var(--line);font-size:.9rem;}
@@ -890,7 +899,7 @@ nav.tabbar button.active .pillbg{background:color-mix(in srgb,var(--accent) 22%,
 <script>
 "use strict";
 const STORE_KEY="miturno_v1";
-const VERSION="3.6";
+const VERSION="3.7";
 const MONTHS=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const DOW=["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
 const DOW_S=["D","L","M","X","J","V","S"];
@@ -904,10 +913,14 @@ const num=v=>(v===""||v==null)?null:parseFloat(String(v).replace(",","."));
 const cap=s=>s.charAt(0).toUpperCase()+s.slice(1);
 
 // ---- Valores por defecto (de ejemplo; cada uno pone los suyos en Ajustes) ----
+// Imágenes de fondo para los turnos (rellenan la casilla del día)
+const IMGS={amanecer:{n:"Amanecer",src:"icons/turno-amanecer.jpg"},dia:{n:"Día",src:"icons/turno-dia.jpg"},noche:{n:"Noche",src:"icons/turno-noche.jpg"}};
+const DEF_IMG={M:"amanecer",T:"dia",N:"noche"};
+function shiftImg(s){return s&&IMGS[s.img]?IMGS[s.img].src:null;}
 function defShifts(h=8){return [
-  {id:"M",name:"Mañana",short:"M",color:"#f5c451",start:"06:00",end:"14:00",hours:h,night:false},
-  {id:"T",name:"Tarde",short:"T",color:"#4ea3f2",start:"14:00",end:"22:00",hours:h,night:false},
-  {id:"N",name:"Noche",short:"N",color:"#8b7cf8",start:"22:00",end:"06:00",hours:h,night:true}];}
+  {id:"M",name:"Mañana",short:"M",color:"#f5c451",img:"amanecer",start:"06:00",end:"14:00",hours:h,night:false},
+  {id:"T",name:"Tarde",short:"T",color:"#4ea3f2",img:"dia",start:"14:00",end:"22:00",hours:h,night:false},
+  {id:"N",name:"Noche",short:"N",color:"#8b7cf8",img:"noche",start:"22:00",end:"06:00",hours:h,night:true}];}
 function defCfg(){return {
   payMode:"fixed", fijoMes:1500, hourly:null,
   incentMode:"h", incentRate:2.76, incentivoEst:0, // incentivo: por hora trabajada, por día trabajado o fijo
@@ -959,6 +972,8 @@ function normalize(d){
   d.prefs={theme:"auto",onboarded:false,pattern:[],rev:0,...(d.prefs||{})};
   // 3.3: quien tenía el incentivo por hora sin precio recibe una vez el precio base de la empresa
   if(d.prefs.rev<1){ if(d.cfg.incentMode==="h"&&d.cfg.incentRate==null) d.cfg.incentRate=dc.incentRate; d.prefs.rev=1; }
+  // 3.7: los turnos de mañana, tarde y noche reciben su imagen de fondo
+  if(d.prefs.rev<2){ d.shifts.forEach(s=>{if(s.img===undefined&&DEF_IMG[s.id])s.img=DEF_IMG[s.id];}); d.prefs.rev=2; }
   return d;
 }
 function load(){
@@ -1142,13 +1157,15 @@ $("nextM").onclick=()=>shiftMonth(1);
 })();
 
 function renderPaint(){
-  $("paint").innerHTML=data.shifts.map(s=>`<button data-p="${s.id}" class="${paint===s.id?"on":""}"><i style="background:${s.color}"></i>${esc(s.name)}</button>`).join("")
+  $("paint").innerHTML=data.shifts.map(s=>{const im=shiftImg(s);
+      return `<button data-p="${s.id}" class="${paint===s.id?"on":""}"><i style="${im?`background:url(${im}) center/cover;width:16px;height:16px;border-radius:4px`:`background:${s.color}`}"></i>${esc(s.name)}</button>`;}).join("")
     +`<button data-p="X" class="${paint==="X"?"on":""}"><i style="background:var(--faint)"></i>Borrar</button>`;
   document.querySelectorAll("#paint button").forEach(b=>b.onclick=()=>{
     paint=(paint===b.dataset.p)?null:b.dataset.p; buzz(); renderPaint();
     $("paint-hint").classList.toggle("show",!!paint);
   });
-  $("legend").innerHTML=data.shifts.map(s=>`<span><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join("")
+  $("legend").innerHTML=data.shifts.map(s=>{const im=shiftImg(s);
+      return `<span>${im?`<i class="pic" style="background-image:url(${im})"></i>`:`<i style="background:${s.color}"></i>`}${esc(s.name)}</span>`;}).join("")
     +`<span><i style="color:var(--accent)">★</i>${esc(data.cfg.prog.name)}</span><span><i style="color:var(--ok);font-weight:800">+</i>Horas extra</span><span><i style="color:var(--bad);font-weight:800">7</i>Festivo</span>`;
 }
 
@@ -1170,10 +1187,12 @@ function renderCal(dir){
     let html=`<span class="num">${d}</span>`;
     const s=rec&&rec.t&&shiftById(rec.t);
     if(s){
-      cell.classList.add("has"); cell.style.cssText=cssVars(s);
+      const im=shiftImg(s);
+      cell.classList.add("has"); cell.style.cssText=cssVars(s)+(im?`;--im:url(${im})`:"");
+      if(im) cell.classList.add("img");
       if(rec.cancel) cell.classList.add("cancel");
       if(rec.prog&&data.cfg.prog.enabled) cell.classList.add("extra");
-      html+=`<span class="tag">${esc(s.short)}</span>`;
+      if(!im) html+=`<span class="tag">${esc(s.short)}</span>`;
     }
     if(rec&&rec.extra>0) html+=`<span class="ot">+</span>`;
     if(rec&&rec.note) html+=`<span class="dot"></span>`;
@@ -1234,7 +1253,8 @@ function openDay(k){
   $("m-title").textContent=DOW[dt.getDay()];
   const nf=natFest(k)?" · "+nationalFest(dt.getFullYear()).get(k):"";
   $("m-date").textContent=`${dt.getDate()} de ${MONTHS[dt.getMonth()]} de ${dt.getFullYear()}${nf}`;
-  $("m-turns").innerHTML=data.shifts.map(s=>`<button data-t="${s.id}" style="${cssVars(s)}"><span class="sh">${esc(s.short)}</span><span class="n">${esc(s.name)}</span></button>`).join("")
+  $("m-turns").innerHTML=data.shifts.map(s=>{const im=shiftImg(s);
+      return `<button data-t="${s.id}" style="${cssVars(s)}"><span class="sh${im?" pic":""}"${im?` style="background-image:url(${im})"`:""}>${esc(s.short)}</span><span class="n">${esc(s.name)}</span></button>`;}).join("")
     +`<button data-t="" class="free"><span class="sh">–</span><span class="n">Libre</span></button>`;
   document.querySelectorAll("#m-turns button").forEach(b=>{
     b.classList.toggle("sel",b.dataset.t===mSel.t);
@@ -1658,11 +1678,13 @@ function bindCheck(id,get,set,after){const el=$(id); el.checked=!!get(); el.onch
 function avatarHTML(){
   const p=data.profile;
   if(p.photo&&/^data:image\/(jpeg|png|webp);base64,/.test(p.photo)) return `<img src="${esc(p.photo)}" alt="">`;
+  // sin foto propia: si la empresa es WYS sale su logo
+  if(/\bwys\b/i.test(p.company||"")) return `<img src="icons/empresa-wys.png" alt="WYS">`;
   return esc((p.name||"?").trim().charAt(0).toUpperCase()||"?");
 }
 function renderPerfil(){
   bindText("pf-in-name",()=>data.profile.name,v=>{data.profile.name=v;if(!data.profile.photo)$("pf-photo").innerHTML=avatarHTML();});
-  bindText("pf-in-company",()=>data.profile.company,v=>data.profile.company=v);
+  bindText("pf-in-company",()=>data.profile.company,v=>{data.profile.company=v;if(!data.profile.photo)$("pf-photo").innerHTML=avatarHTML();});
   $("pf-photo").innerHTML=avatarHTML();
   $("pf-del").classList.toggle("hidden",!data.profile.photo);
   $("pf-file-txt").textContent=data.profile.photo?"Cambiar foto":"Poner foto";
@@ -1726,7 +1748,7 @@ $("addConc").onclick=()=>{data.cfg.conceptos.push({name:"",amount:null});renderC
 
 function renderShifts(){
   $("shiftList").innerHTML=data.shifts.map(s=>`<button class="listbtn" data-id="${s.id}">
-    <span class="sw" style="background:${s.color};color:${textOn(s.color)}">${esc(s.short)}</span>
+    <span class="sw" style="${shiftImg(s)?`background:url(${shiftImg(s)}) center/cover;color:#fff;text-shadow:0 1px 3px #000`:`background:${s.color};color:${textOn(s.color)}`}">${esc(s.short)}</span>
     <span class="t">${esc(s.name)}${s.night?' <span style="color:var(--faint);font-size:.74rem">· noche</span>':""}<small>${s.start&&s.end?`${s.start} – ${s.end} · `:""}${fmtH(s.hours)}</small></span>
     <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 6l6 6-6 6"/></svg></button>`).join("");
   $("shiftList").querySelectorAll("button").forEach(b=>b.onclick=()=>editShift(b.dataset.id));
@@ -1734,7 +1756,7 @@ function renderShifts(){
 $("addShift").onclick=()=>editShift(null);
 function editShift(id){
   const isNew=!id;
-  const s=isNew?{id:"S"+Date.now().toString(36),name:"",short:"",color:PALETTE[data.shifts.length%PALETTE.length],start:"08:00",end:"16:00",hours:8,night:false}:{...shiftById(id)};
+  const s=isNew?{id:"S"+Date.now().toString(36),name:"",short:"",color:PALETTE[data.shifts.length%PALETTE.length],img:"",start:"08:00",end:"16:00",hours:8,night:false}:{...shiftById(id)};
   openEdit(isNew?"Nuevo turno":"Editar turno",`
     <div class="row2">
       <label class="field"><span class="lab">Nombre</span><input id="e-name" maxlength="20" value="${esc(s.name)}" placeholder="Ej. Partido"></label>
@@ -1747,17 +1769,23 @@ function editShift(id){
     <label class="field"><span class="lab">Horas que cuentan (descuenta descansos si no se pagan)</span><div class="inp"><input id="e-hours" type="number" step="0.25" inputmode="decimal" value="${s.hours??""}"><span class="unit">h</span></div></label>
     <span class="lab">Color</span>
     <div class="swatches" id="e-colors">${PALETTE.map(c=>`<button data-c="${c}" style="background:${c}" class="${c===s.color?"on":""}" aria-label="Color"></button>`).join("")}</div>
+    <span class="lab">Imagen de fondo en el calendario</span>
+    <div class="swatches" id="e-img">
+      <button data-i="" class="${!IMGS[s.img]?"on":""}" style="border-radius:10px;width:54px;height:54px;background:var(--surface2);color:var(--muted);font-size:.7rem;font-weight:700">Sin<br>imagen</button>
+      ${Object.entries(IMGS).map(([k,v])=>`<button data-i="${k}" class="${s.img===k?"on":""}" style="border-radius:10px;width:54px;height:54px;background:url(${v.src}) center/cover" aria-label="${v.n}"></button>`).join("")}
+    </div>
     <div class="togglerow"><span>Turno de noche<small>Cuenta como noche en estadísticas y al comparar la nómina</small></span>
       <label class="switch"><input type="checkbox" id="e-night" ${s.night?"checked":""}><span class="slider"></span></label></div>`,{
     onMount(){
       const upd=()=>{const h=shiftHours($("e-start").value,$("e-end").value);if(h!=null)$("e-hours").value=h;};
       $("e-start").onchange=upd; $("e-end").onchange=upd;
-      chipToggle($("e-colors"),false);
+      chipToggle($("e-colors"),false); chipToggle($("e-img"),false);
     },
     onSave(){
       const name=$("e-name").value.trim(); if(!name){toast("Ponle un nombre al turno");return false;}
       Object.assign(s,{name,short:($("e-short").value.trim()||name.charAt(0)).toUpperCase(),start:$("e-start").value,end:$("e-end").value,
-        hours:num($("e-hours").value)||0,night:$("e-night").checked,color:$("e-colors").querySelector(".on")?.dataset.c||s.color});
+        hours:num($("e-hours").value)||0,night:$("e-night").checked,color:$("e-colors").querySelector(".on")?.dataset.c||s.color,
+        img:$("e-img").querySelector(".on")?.dataset.i||""});
       if(isNew) data.shifts.push(s); else data.shifts[data.shifts.findIndex(x=>x.id===id)]=s;
       renderShifts();
     },

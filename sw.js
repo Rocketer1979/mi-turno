@@ -1,6 +1,6 @@
 // Service worker: guarda la app en caché para que funcione sin conexión.
 // Sube la versión cada vez que cambies index.html para que los móviles se actualicen.
-const CACHE = "miturno-v3.6.0";
+const CACHE = "miturno-v3.7.0";
 const ASSETS = [
   "./",
   "./index.html",
@@ -8,7 +8,11 @@ const ASSETS = [
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/icon-maskable-512.png",
-  "./icons/apple-touch-icon.png"
+  "./icons/apple-touch-icon.png",
+  "./icons/turno-amanecer.jpg",
+  "./icons/turno-dia.jpg",
+  "./icons/turno-noche.jpg",
+  "./icons/empresa-wys.png"
 ];
 
 self.addEventListener("install", e => {

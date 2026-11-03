@@ -838,7 +838,7 @@ nav.tabbar button.active .pillbg{background:color-mix(in srgb,var(--accent) 22%,
 <script>
 "use strict";
 const STORE_KEY="miturno_v1";
-const VERSION="3.2";
+const VERSION="3.3";
 const MONTHS=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const DOW=["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
 const DOW_S=["D","L","M","X","J","V","S"];
@@ -858,7 +858,7 @@ function defShifts(h=8){return [
   {id:"N",name:"Noche",short:"N",color:"#8b7cf8",start:"22:00",end:"06:00",hours:h,night:true}];}
 function defCfg(){return {
   payMode:"fixed", fijoMes:1500, hourly:null,
-  incentMode:"h", incentRate:null, incentivoEst:0, // incentivo: por hora trabajada, por día trabajado o fijo
+  incentMode:"h", incentRate:2.76, incentivoEst:0, // incentivo: por hora trabajada, por día trabajado o fijo
   prorrata:250, prorrataExtra:true, conceptos:[],
   ss:6.5, irpf:15, extraPrice:15,
   pluses:[
@@ -904,7 +904,9 @@ function normalize(d){
   d.days=d.days||{}; d.nominas=d.nominas||{};
   d.progDone=d.progDone||{}; // progresivas hechas antes de usar la app, por año (personal, no va en la plantilla)
   d.profile={name:"",company:"",...(d.profile||{})};
-  d.prefs={theme:"auto",onboarded:false,pattern:[],...(d.prefs||{})};
+  d.prefs={theme:"auto",onboarded:false,pattern:[],rev:0,...(d.prefs||{})};
+  // 3.3: quien tenía el incentivo por hora sin precio recibe una vez el precio base de la empresa
+  if(d.prefs.rev<1){ if(d.cfg.incentMode==="h"&&d.cfg.incentRate==null) d.cfg.incentRate=dc.incentRate; d.prefs.rev=1; }
   return d;
 }
 function load(){

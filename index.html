@@ -204,6 +204,16 @@ input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px;}
 .prog div span{font-size:.62rem;color:var(--faint);}
 .prog div.used{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,var(--surface2));}
 .prog div.used span{color:var(--accent);}
+.prog div.prev{background:color-mix(in srgb,var(--accent) 8%,var(--surface2));}
+.prog div.prev span{color:var(--muted);}
+.prog div.next{border:1.5px dashed var(--accent);}
+.prog button{background:var(--surface2);border-radius:10px;padding:8px 2px;text-align:center;border:1.5px solid transparent;color:var(--ink);}
+.prog button b{display:block;font-size:.88rem;}
+.prog button span{font-size:.62rem;color:var(--faint);}
+.prog button.prev{background:color-mix(in srgb,var(--accent) 12%,var(--surface2));}
+.prog button.prev span{color:var(--muted);}
+.prog button.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent);}
+.prog button.on span{color:var(--on-accent);font-weight:700;}
 .bar{height:6px;background:var(--surface2);border-radius:6px;overflow:hidden;margin:12px 0 4px;}
 .bar i{display:block;height:100%;background:var(--accent);border-radius:6px;transition:width .3s;}
 
@@ -441,6 +451,7 @@ nav.tabbar button.active .pillbg{background:color-mix(in srgb,var(--accent) 22%,
           <div class="prog num-f" id="prog-list"></div>
           <div class="bar"><i id="prog-bar" style="width:0"></i></div>
           <p class="note" id="prog-note" style="margin-top:4px"></p>
+          <button class="btn sec" id="progAdjBtn">Indicar por cuál voy</button>
         </div>
       </div>
     </div>
@@ -671,7 +682,16 @@ nav.tabbar button.active .pillbg{background:color-mix(in srgb,var(--accent) 22%,
         <span>Usar turnos progresivos<small>Turnos extra cuyo precio sube según cuántos llevas en el año</small></span>
         <label class="switch"><input type="checkbox" id="pg-enabled"><span class="slider"></span></label>
       </div>
-      <div id="pg-fields">
+    </div>
+    <div id="pg-fields">
+    <div class="section-title" id="pg-start-title">Por cuál vas</div>
+    <div class="card">
+      <p class="sub" style="margin-bottom:10px">Toca el precio de la <b>próxima</b> progresiva que vas a hacer. Así la app sabe cuántas llevas este año aunque no las hayas marcado en el calendario.</p>
+      <div class="prog num-f" id="pg-start"></div>
+      <p class="note" id="pg-start-note"></p>
+    </div>
+    <div class="section-title">Precios</div>
+    <div class="card">
         <label class="field"><span class="lab">Nombre</span><input id="pg-name" maxlength="30"></label>
         <span class="lab" style="margin-top:12px">Precio de cada turno, en orden</span>
         <div class="pricegrid num-f" id="pg-prices"></div>
@@ -812,7 +832,7 @@ nav.tabbar button.active .pillbg{background:color-mix(in srgb,var(--accent) 22%,
 <script>
 "use strict";
 const STORE_KEY="miturno_v1";
-const VERSION="3.0";
+const VERSION="3.1";
 const MONTHS=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const DOW=["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
 const DOW_S=["D","L","M","X","J","V","S"];
@@ -872,6 +892,7 @@ function normalize(d){
   if(!Array.isArray(d.cfg.prog.prices)) d.cfg.prog.prices=dc.prog.prices;
   if(!Array.isArray(d.shifts)||!d.shifts.length) d.shifts=defShifts();
   d.days=d.days||{}; d.nominas=d.nominas||{};
+  d.progDone=d.progDone||{}; // progresivas hechas antes de usar la app, por año (personal, no va en la plantilla)
   d.profile={name:"",company:"",...(d.profile||{})};
   d.prefs={theme:"auto",onboarded:false,pattern:[],...(d.prefs||{})};
   return d;
@@ -929,12 +950,17 @@ function dayInfo(k){
   }
   return {s,dow,fest,hours:h,extraH:+r.extra||0,lessH:+r.less||0,plus,plusBy,prog:!!r.prog};
 }
-// Precio de cada progresiva según su orden en el año
+// Precio de cada progresiva según su orden en el año (contando las hechas antes de usar la app)
+function progStart(y){return data.progDone[y]||0;}
 function progMap(y){
-  const pr=data.cfg.prog.prices, mp={};
+  const pr=data.cfg.prog.prices, mp={}, start=progStart(y);
   Object.keys(data.days).filter(k=>k.startsWith(y+"-")&&dayInfo(k)&&data.days[k].prog).sort()
-    .forEach((k,i)=>mp[k]=pr.length?(pr[Math.min(i,pr.length-1)]||0):0);
+    .forEach((k,i)=>mp[k]=pr.length?(pr[Math.min(start+i,pr.length-1)]||0):0);
   return mp;
+}
+function progNext(y){
+  const pr=data.cfg.prog.prices, used=progStart(y)+Object.keys(progMap(y)).length;
+  return {used,price:pr.length?pr[Math.min(used,pr.length-1)]:0};
 }
 function aggregate(from,to){
   const a={dias:0,noches:0,finde:0,fest:0,prog:0,hours:0,extraH:0,lessH:0,plus:0,plusBy:{},progB:0,byShift:{}};
@@ -1280,6 +1306,7 @@ document.querySelectorAll("#paySeg button").forEach(b=>b.onclick=()=>{
 $("cPrev").onclick=()=>{cur.setMonth(cur.getMonth()-1);buzz(5);renderPay();};
 $("cNext").onclick=()=>{cur.setMonth(cur.getMonth()+1);buzz(5);renderPay();};
 $("editRatesBtn").onclick=()=>openPage("salario");
+$("progAdjBtn").onclick=()=>openPage("prog");
 function renderPay(){
   updateEyebrow();
   $("sub-est").classList.toggle("hidden",paySub!=="est");
@@ -1321,13 +1348,12 @@ function renderProgList(){
   const y=cur.getFullYear(), c=data.cfg;
   $("progWrap").classList.toggle("hidden",!c.prog.enabled||!c.prog.prices.length);
   if(!c.prog.enabled) return;
-  const used=Object.keys(progMap(y)).length, n=c.prog.prices.length;
-  const total=c.prog.prices.reduce((a,b)=>a+(b||0),0);
+  const start=progStart(y), {used,price}=progNext(y), n=c.prog.prices.length;
   $("prog-st").textContent=`${c.prog.name} ${y}`;
   $("prog-title").textContent=c.prog.name;
-  $("prog-list").innerHTML=c.prog.prices.map((pr,i)=>`<div class="${i<used?"used":""}"><b>${pr??"–"}€</b><span>${i+1}º</span></div>`).join("");
+  $("prog-list").innerHTML=c.prog.prices.map((pr,i)=>`<div class="${i<start?"prev":i<used?"used":i===used?"next":""}"><b>${pr??"–"}€</b><span>${i<start?"hecha":i===used?"próxima":i+1+"º"}</span></div>`).join("");
   $("prog-bar").style.width=Math.min(100,used/n*100)+"%";
-  $("prog-note").textContent=`Llevas ${used} de ${n}. Si haces los ${n}: ${eur(total)} brutos.`;
+  $("prog-note").textContent=`Llevas ${used} de ${n}${start?` (${start} ${start===1?"hecha":"hechas"} antes de usar la app)`:""}. ${used<n?`La próxima se paga a ${eur(price)}.`:`Las siguientes se pagan a ${eur(price)}.`}`;
 }
 
 // ---- Comparar ----
@@ -1476,7 +1502,7 @@ function renderSettings(){
       '<path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'],
     ["turnos","Mis turnos",data.shifts.map(s=>s.name).join(", "),'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'],
     ["pluses","Pluses",`${c.pluses.length} ${c.pluses.length===1?"plus":"pluses"}${pend?` · ${pend} sin precio`:""}`,'<path d="M12 5v14M5 12h14"/>'],
-    ["prog","Progresivas",c.prog.enabled?`${c.prog.prices.length} precios · ${eur(c.prog.prices[0]||0,0)} a ${eur(c.prog.prices[c.prog.prices.length-1]||0,0)}`:"Desactivadas",'<path d="M3 17l6-6 4 4 8-8M14 7h7v7"/>'],
+    ["prog","Progresivas",c.prog.enabled?`Llevas ${progNext(new Date().getFullYear()).used} · la próxima a ${eur(progNext(new Date().getFullYear()).price||0,0)}`:"Desactivadas",'<path d="M3 17l6-6 4 4 8-8M14 7h7v7"/>'],
     ["fest","Festivos",c.festNac?"Nacionales activados":"Solo los que marques",'<path d="M4 22V4a1 1 0 0 1 1-1h12l-2 4 2 4H5"/>'],
   ];
   $("cfgList").innerHTML=items.map(([pg,t,s,ic])=>`<button class="listbtn" data-page="${pg}">
@@ -1648,7 +1674,20 @@ function renderProgCfg(){
   bindCheck("pg-enabled",()=>pr.enabled,v=>pr.enabled=v,vis); vis();
   bindText("pg-name",()=>pr.name,v=>pr.name=v||"Turnos progresivos");
   $("pg-prices").innerHTML=pr.prices.map((v,i)=>`<label><b>${i+1}º</b><div class="inp" style="flex:1"><input data-i="${i}" type="number" inputmode="decimal" step="0.01" value="${v??""}"><span class="unit">€</span></div></label>`).join("");
-  $("pg-prices").querySelectorAll("input").forEach(el=>el.oninput=()=>{pr.prices[+el.dataset.i]=num(el.value);changed();});
+  $("pg-prices").querySelectorAll("input").forEach(el=>el.oninput=()=>{pr.prices[+el.dataset.i]=num(el.value);changed();renderProgStart();});
+  renderProgStart();
+}
+function renderProgStart(){
+  const y=new Date().getFullYear(), start=progStart(y), marked=Object.keys(progMap(y)).length, pr=data.cfg.prog.prices;
+  $("pg-start-title").textContent=`Por cuál vas en ${y}`;
+  $("pg-start").innerHTML=pr.map((v,i)=>`<button data-i="${i}" class="${i<start?"prev":i===start?"on":""}"><b>${v??"–"}€</b><span>${i<start?"hecha":i===start?"próxima":i+1+"º"}</span></button>`).join("");
+  $("pg-start").querySelectorAll("button").forEach(b=>b.onclick=()=>{
+    const i=+b.dataset.i; if(i) data.progDone[y]=i; else delete data.progDone[y];
+    changed(); buzz(); renderProgStart();
+  });
+  $("pg-start-note").textContent=(start?`Has hecho ${start} antes de usar la app.`:"Empiezas desde la primera.")
+    +(marked?` Además tienes ${marked} marcada${marked===1?"":"s"} en el calendario, así que la próxima que marques se pagará a ${eur(progNext(y).price)}.`:" Las que marques en el calendario seguirán desde aquí.")
+    +" En enero vuelve a empezar de cero.";
 }
 $("pg-add").onclick=()=>{const pr=data.cfg.prog.prices;pr.push(pr.length?pr[pr.length-1]:0);renderProgCfg();changed();buzz();};
 $("pg-del").onclick=()=>{const pr=data.cfg.prog.prices;if(pr.length>1){pr.pop();renderProgCfg();changed();buzz();}};

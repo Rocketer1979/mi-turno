@@ -206,6 +206,15 @@ input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px;}
 .swatches{display:flex;flex-wrap:wrap;gap:10px;margin:4px 0 10px;}
 .swatches button{width:34px;height:34px;border-radius:50%;border:3px solid transparent;outline:2px solid transparent;}
 .swatches button.on{border-color:var(--surface);outline-color:var(--ink);}
+.imgpick{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;}
+.imgpick button{width:auto;height:auto;aspect-ratio:1;border-radius:10px;background:var(--surface2) center/cover;}
+.imgpick button.on{outline:3px solid var(--accent);outline-offset:1px;}
+.imgpick .letter{display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--ink);border:1.5px solid var(--line);}
+.imgpick .letter b{font-size:1.15rem;line-height:1;} .imgpick .letter small{font-size:.58rem;color:var(--faint);margin-top:3px;}
+.sheet .titlerow{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+.morebtn{display:flex;align-items:center;gap:4px;border:1.5px solid var(--line);background:var(--surface2);color:var(--accent);
+  border-radius:12px;padding:8px 11px;font-weight:700;font-size:.78rem;white-space:nowrap;}
+.morebtn b{font-size:1.1rem;line-height:1;}
 .conc{display:grid;grid-template-columns:1fr 110px 40px;gap:8px;align-items:center;margin:8px 0;}
 .conc .x{height:46px;border-radius:12px;border:1px solid var(--line);background:var(--surface2);color:var(--bad);font-size:1.1rem;}
 .pricegrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
@@ -715,6 +724,7 @@ nav.tabbar button.active .pillbg{background:color-mix(in srgb,var(--accent) 22%,
   <div class="pbody">
     <p class="note">Crea los turnos que haces: nombre, horario, horas y color. Los pluses se configuran aparte y se aplican según el turno y el día.</p>
     <div class="card list" id="shiftList"></div>
+    <button class="btn sec" id="shiftImgsBtn">Elegir imágenes de los turnos</button>
     <button class="btn" id="addShift">+ Nuevo turno</button>
   </div>
 </div>
@@ -791,6 +801,10 @@ nav.tabbar button.active .pillbg{background:color-mix(in srgb,var(--accent) 22%,
     <div class="grab"></div>
     <h3 class="cap" id="m-title">Día</h3>
     <div class="dstr" id="m-date"></div>
+    <div class="titlerow" style="align-items:center;margin-bottom:8px">
+      <span class="lab" style="margin:0">Turno</span>
+      <button class="morebtn" id="m-imgs" aria-label="Elegir imágenes de los turnos"><b>+</b> Imágenes</button>
+    </div>
     <div class="turnsel" id="m-turns"></div>
     <div class="row2" style="margin:12px 0 6px">
       <div><span class="lab">Horas extra</span><div class="stepper"><button data-st="extra" data-d="-0.5">−</button><b id="m-extra">0 h</b><button data-st="extra" data-d="0.5">+</button></div></div>
@@ -899,7 +913,7 @@ nav.tabbar button.active .pillbg{background:color-mix(in srgb,var(--accent) 22%,
 <script>
 "use strict";
 const STORE_KEY="miturno_v1";
-const VERSION="3.7";
+const VERSION="3.8";
 const MONTHS=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const DOW=["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
 const DOW_S=["D","L","M","X","J","V","S"];
@@ -914,13 +928,21 @@ const cap=s=>s.charAt(0).toUpperCase()+s.slice(1);
 
 // ---- Valores por defecto (de ejemplo; cada uno pone los suyos en Ajustes) ----
 // Imágenes de fondo para los turnos (rellenan la casilla del día)
-const IMGS={amanecer:{n:"Amanecer",src:"icons/turno-amanecer.jpg"},dia:{n:"Día",src:"icons/turno-dia.jpg"},noche:{n:"Noche",src:"icons/turno-noche.jpg"}};
-const DEF_IMG={M:"amanecer",T:"dia",N:"noche"};
+const IMGS={
+  sol:{n:"Sol",src:"icons/turno-sol.jpg"},atardecer:{n:"Atardecer",src:"icons/turno-atardecer.jpg"},luna:{n:"Luna llena",src:"icons/turno-luna.jpg"},
+  amanecer:{n:"Amanecer",src:"icons/turno-amanecer.jpg"},dia:{n:"Cielo",src:"icons/turno-dia.jpg"},noche:{n:"Noche estrellada",src:"icons/turno-noche.jpg"}};
+const DEF_IMG={M:"sol",T:"atardecer",N:"luna"};
+const OLD_DEF_IMG={M:"amanecer",T:"dia",N:"noche"}; // los de la 3.7
+// Galería para elegir: la letra del turno o una de las imágenes
+function imgPickerHTML(id,sel,short){
+  return `<div class="swatches imgpick" id="${id}"><button data-i="" class="letter${!IMGS[sel]?" on":""}"><b>${esc(short||"?")}</b><small>Letra</small></button>`
+    +Object.entries(IMGS).map(([k,v])=>`<button data-i="${k}" class="${sel===k?"on":""}" style="background-image:url(${v.src})" aria-label="${v.n}"></button>`).join("")+`</div>`;
+}
 function shiftImg(s){return s&&IMGS[s.img]?IMGS[s.img].src:null;}
 function defShifts(h=8){return [
-  {id:"M",name:"Mañana",short:"M",color:"#f5c451",img:"amanecer",start:"06:00",end:"14:00",hours:h,night:false},
-  {id:"T",name:"Tarde",short:"T",color:"#4ea3f2",img:"dia",start:"14:00",end:"22:00",hours:h,night:false},
-  {id:"N",name:"Noche",short:"N",color:"#8b7cf8",img:"noche",start:"22:00",end:"06:00",hours:h,night:true}];}
+  {id:"M",name:"Mañana",short:"M",color:"#f5c451",img:"sol",start:"06:00",end:"14:00",hours:h,night:false},
+  {id:"T",name:"Tarde",short:"T",color:"#4ea3f2",img:"atardecer",start:"14:00",end:"22:00",hours:h,night:false},
+  {id:"N",name:"Noche",short:"N",color:"#8b7cf8",img:"luna",start:"22:00",end:"06:00",hours:h,night:true}];}
 function defCfg(){return {
   payMode:"fixed", fijoMes:1500, hourly:null,
   incentMode:"h", incentRate:2.76, incentivoEst:0, // incentivo: por hora trabajada, por día trabajado o fijo
@@ -974,6 +996,8 @@ function normalize(d){
   if(d.prefs.rev<1){ if(d.cfg.incentMode==="h"&&d.cfg.incentRate==null) d.cfg.incentRate=dc.incentRate; d.prefs.rev=1; }
   // 3.7: los turnos de mañana, tarde y noche reciben su imagen de fondo
   if(d.prefs.rev<2){ d.shifts.forEach(s=>{if(s.img===undefined&&DEF_IMG[s.id])s.img=DEF_IMG[s.id];}); d.prefs.rev=2; }
+  // 3.8: quien tenía las imágenes por defecto de la 3.7 pasa a las nuevas (sol, atardecer, luna)
+  if(d.prefs.rev<3){ d.shifts.forEach(s=>{if(OLD_DEF_IMG[s.id]&&s.img===OLD_DEF_IMG[s.id])s.img=DEF_IMG[s.id];}); d.prefs.rev=3; }
   return d;
 }
 function load(){
@@ -1253,13 +1277,7 @@ function openDay(k){
   $("m-title").textContent=DOW[dt.getDay()];
   const nf=natFest(k)?" · "+nationalFest(dt.getFullYear()).get(k):"";
   $("m-date").textContent=`${dt.getDate()} de ${MONTHS[dt.getMonth()]} de ${dt.getFullYear()}${nf}`;
-  $("m-turns").innerHTML=data.shifts.map(s=>{const im=shiftImg(s);
-      return `<button data-t="${s.id}" style="${cssVars(s)}"><span class="sh${im?" pic":""}"${im?` style="background-image:url(${im})"`:""}>${esc(s.short)}</span><span class="n">${esc(s.name)}</span></button>`;}).join("")
-    +`<button data-t="" class="free"><span class="sh">–</span><span class="n">Libre</span></button>`;
-  document.querySelectorAll("#m-turns button").forEach(b=>{
-    b.classList.toggle("sel",b.dataset.t===mSel.t);
-    b.onclick=()=>{mSel.t=b.dataset.t;buzz();document.querySelectorAll("#m-turns button").forEach(x=>x.classList.toggle("sel",x===b));};
-  });
+  renderDayTurns();
   $("m-prog-row").classList.toggle("hidden",!data.cfg.prog.enabled);
   $("m-prog-name").textContent=data.cfg.prog.name.replace(/s$/,"").replace(/os\b/,"o");
   $("m-prog").checked=mSel.prog; $("m-cancel").checked=mSel.cancel; $("m-fest").checked=mSel.fest;
@@ -1267,6 +1285,27 @@ function openDay(k){
   $("m-note").value=rec.note||"";
   buzz(); openModal("dayModal");
 }
+function renderDayTurns(){
+  $("m-turns").innerHTML=data.shifts.map(s=>{const im=shiftImg(s);
+      return `<button data-t="${s.id}" style="${cssVars(s)}"><span class="sh${im?" pic":""}"${im?` style="background-image:url(${im})"`:""}>${esc(s.short)}</span><span class="n">${esc(s.name)}</span></button>`;}).join("")
+    +`<button data-t="" class="free"><span class="sh">–</span><span class="n">Libre</span></button>`;
+  document.querySelectorAll("#m-turns button").forEach(b=>{
+    b.classList.toggle("sel",b.dataset.t===mSel.t);
+    b.onclick=()=>{mSel.t=b.dataset.t;buzz();document.querySelectorAll("#m-turns button").forEach(x=>x.classList.toggle("sel",x===b));};
+  });
+}
+// Elegir de golpe cómo se ve cada turno (letra o imagen)
+function editShiftImages(){
+  openEdit("Imágenes de los turnos",
+    `<p class="note" style="margin:0 0 6px">Elige cómo se ve cada turno en el calendario: su letra o una imagen.</p>`
+    +data.shifts.map(s=>`<span class="lab" style="margin-top:12px">${esc(s.name)}</span>${imgPickerHTML("ei-"+s.id,s.img,s.short)}`).join(""),{
+    onMount(){data.shifts.forEach(s=>chipToggle($("ei-"+s.id),false));},
+    onSave(){
+      data.shifts.forEach(s=>{s.img=$("ei-"+s.id).querySelector(".on")?.dataset.i||"";});
+      renderDayTurns(); renderView(); if(curPage==="turnos") renderShifts();
+    }});
+}
+$("m-imgs").onclick=()=>{buzz();editShiftImages();};
 document.querySelectorAll("#dayModal .stepper button").forEach(b=>b.onclick=()=>{
   const f=b.dataset.st; mSel[f]=Math.max(0,Math.min(24,mSel[f]+parseFloat(b.dataset.d)));
   $("m-"+f).textContent=fmtH(mSel[f]); buzz(5);
@@ -1754,6 +1793,7 @@ function renderShifts(){
   $("shiftList").querySelectorAll("button").forEach(b=>b.onclick=()=>editShift(b.dataset.id));
 }
 $("addShift").onclick=()=>editShift(null);
+$("shiftImgsBtn").onclick=()=>editShiftImages();
 function editShift(id){
   const isNew=!id;
   const s=isNew?{id:"S"+Date.now().toString(36),name:"",short:"",color:PALETTE[data.shifts.length%PALETTE.length],img:"",start:"08:00",end:"16:00",hours:8,night:false}:{...shiftById(id)};
@@ -1769,11 +1809,8 @@ function editShift(id){
     <label class="field"><span class="lab">Horas que cuentan (descuenta descansos si no se pagan)</span><div class="inp"><input id="e-hours" type="number" step="0.25" inputmode="decimal" value="${s.hours??""}"><span class="unit">h</span></div></label>
     <span class="lab">Color</span>
     <div class="swatches" id="e-colors">${PALETTE.map(c=>`<button data-c="${c}" style="background:${c}" class="${c===s.color?"on":""}" aria-label="Color"></button>`).join("")}</div>
-    <span class="lab">Imagen de fondo en el calendario</span>
-    <div class="swatches" id="e-img">
-      <button data-i="" class="${!IMGS[s.img]?"on":""}" style="border-radius:10px;width:54px;height:54px;background:var(--surface2);color:var(--muted);font-size:.7rem;font-weight:700">Sin<br>imagen</button>
-      ${Object.entries(IMGS).map(([k,v])=>`<button data-i="${k}" class="${s.img===k?"on":""}" style="border-radius:10px;width:54px;height:54px;background:url(${v.src}) center/cover" aria-label="${v.n}"></button>`).join("")}
-    </div>
+    <span class="lab">Cómo se ve en el calendario</span>
+    ${imgPickerHTML("e-img",s.img,s.short)}
     <div class="togglerow"><span>Turno de noche<small>Cuenta como noche en estadísticas y al comparar la nómina</small></span>
       <label class="switch"><input type="checkbox" id="e-night" ${s.night?"checked":""}><span class="slider"></span></label></div>`,{
     onMount(){

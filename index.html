@@ -133,7 +133,12 @@ section{animation:fade .22s ease;}
 .day .tag{font-size:.56rem;font-weight:800;line-height:1;padding:2px 5px;border-radius:5px;background:var(--c);color:var(--tc);max-width:90%;overflow:hidden;}
 .day.cancel{opacity:.45;}
 .day.cancel::after{content:"";position:absolute;width:64%;height:2px;background:var(--bad);transform:rotate(-24deg);border-radius:2px;}
-.day.extra::before{content:"★";position:absolute;top:2px;right:4px;font-size:.55rem;color:var(--accent);}
+/* progresiva: estrella dentro de un círculo dorado, visible encima de cualquier imagen */
+.day.extra::before{content:"★";position:absolute;top:3px;right:3px;width:1.1rem;height:1.1rem;border-radius:50%;
+  background:var(--accent);color:#1a1406;font-size:.72rem;line-height:1.1rem;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.6);z-index:1;}
+.turnsel.need{animation:need .5s ease 2;border-radius:16px;box-shadow:0 0 0 2px var(--bad);}
+@keyframes need{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.needhint{font-size:.78rem;color:var(--bad);font-weight:600;margin:-2px 2px 6px;}
 .day .ot{position:absolute;top:2px;left:4px;font-size:.55rem;font-weight:800;color:var(--ok);}
 .day .dot{position:absolute;bottom:4px;width:4px;height:4px;border-radius:50%;background:var(--muted);}
 .legend{display:flex;gap:8px 14px;flex-wrap:wrap;margin-top:14px;font-size:.76rem;color:var(--muted);align-items:center;}
@@ -807,6 +812,7 @@ nav.tabbar button.active .pillbg{background:color-mix(in srgb,var(--accent) 22%,
       <button class="morebtn" id="m-imgs" aria-label="Elegir imágenes de los turnos"><b>+</b> Imágenes</button>
     </div>
     <div class="turnsel" id="m-turns"></div>
+    <div class="needhint hidden" id="m-need">↑ Elige el turno que vas a hacer (Mañana, Tarde o Noche)</div>
     <div class="row2" style="margin:12px 0 6px">
       <div><span class="lab">Horas extra</span><div class="stepper"><button data-st="extra" data-d="-0.5">−</button><b id="m-extra">0 h</b><button data-st="extra" data-d="0.5">+</button></div></div>
       <div><span class="lab">Salida anticipada</span><div class="stepper"><button data-st="less" data-d="-0.5">−</button><b id="m-less">0 h</b><button data-st="less" data-d="0.5">+</button></div></div>
@@ -914,7 +920,7 @@ nav.tabbar button.active .pillbg{background:color-mix(in srgb,var(--accent) 22%,
 <script>
 "use strict";
 const STORE_KEY="miturno_v1";
-const VERSION="3.9";
+const VERSION="3.10";
 const MONTHS=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const DOW=["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
 const DOW_S=["D","L","M","X","J","V","S"];
@@ -1280,7 +1286,7 @@ function openDay(k){
   $("m-title").textContent=DOW[dt.getDay()];
   const nf=natFest(k)?" · "+nationalFest(dt.getFullYear()).get(k):"";
   $("m-date").textContent=`${dt.getDate()} de ${MONTHS[dt.getMonth()]} de ${dt.getFullYear()}${nf}`;
-  renderDayTurns();
+  renderDayTurns(); needShift(false);
   $("m-prog-row").classList.toggle("hidden",!data.cfg.prog.enabled);
   $("m-prog-name").textContent=data.cfg.prog.name.replace(/s$/,"").replace(/os\b/,"o");
   $("m-prog").checked=mSel.prog; $("m-cancel").checked=mSel.cancel; $("m-fest").checked=mSel.fest;
@@ -1294,7 +1300,8 @@ function renderDayTurns(){
     +`<button data-t="" class="free"><span class="sh">–</span><span class="n">Libre</span></button>`;
   document.querySelectorAll("#m-turns button").forEach(b=>{
     b.classList.toggle("sel",b.dataset.t===mSel.t);
-    b.onclick=()=>{mSel.t=b.dataset.t;buzz();document.querySelectorAll("#m-turns button").forEach(x=>x.classList.toggle("sel",x===b));};
+    b.onclick=()=>{mSel.t=b.dataset.t;buzz();document.querySelectorAll("#m-turns button").forEach(x=>x.classList.toggle("sel",x===b));
+      if(mSel.t) needShift(false);};
   });
 }
 // Elegir de golpe cómo se ve cada turno (letra o imagen)
@@ -1313,10 +1320,20 @@ document.querySelectorAll("#dayModal .stepper button").forEach(b=>b.onclick=()=>
   const f=b.dataset.st; mSel[f]=Math.max(0,Math.min(24,mSel[f]+parseFloat(b.dataset.d)));
   $("m-"+f).textContent=fmtH(mSel[f]); buzz(5);
 });
-$("m-prog").onchange=e=>{mSel.prog=e.target.checked;buzz();};
+// Un progresivo es un turno trabajado: necesita saber qué turno es para contar horas y pluses
+function needShift(show){
+  $("m-need").classList.toggle("hidden",!show);
+  const t=$("m-turns"); t.classList.remove("need");
+  if(show){void t.offsetWidth; t.classList.add("need");}
+}
+$("m-prog").onchange=e=>{mSel.prog=e.target.checked;buzz();needShift(mSel.prog&&!mSel.t);};
 $("m-cancel").onchange=e=>{mSel.cancel=e.target.checked;buzz();};
 $("m-fest").onchange=e=>{mSel.fest=e.target.checked;buzz();};
 $("m-save").onclick=()=>{
+  if(!mSel.t&&(mSel.prog||mSel.cancel||mSel.extra||mSel.less)){
+    needShift(true); buzz(30);
+    toast(mSel.prog?"Elige el turno de la progresiva":"Elige primero el turno"); return;
+  }
   const note=$("m-note").value.trim(), rec={};
   if(mSel.t){
     rec.t=mSel.t;

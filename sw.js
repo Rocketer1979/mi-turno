@@ -1,6 +1,6 @@
 // Service worker: guarda la app en caché para que funcione sin conexión.
 // Sube la versión cada vez que cambies index.html para que los móviles se actualicen.
-const CACHE = "miturno-v3.8.0";
+const CACHE = "miturno-v3.9.0";
 const ASSETS = [
   "./",
   "./index.html",

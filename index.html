@@ -2,7 +2,7 @@
 <html lang="es" data-theme="dark">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Mi Turno</title>
 <meta name="description" content="Controla tus turnos y verifica tu nómina">
 <meta name="theme-color" content="#0b1524">
@@ -43,7 +43,8 @@ html,body{margin:0;background:var(--bg);color:var(--ink);
 body{min-height:100vh;transition:background .25s;}
 body.lock{overflow:hidden;}
 button,input,select{font-family:inherit;}
-button{cursor:pointer;}
+/* se puede ampliar con dos dedos; "manipulation" evita que un doble toque en un botón haga zoom */
+button,label,input,select,textarea{cursor:pointer;touch-action:manipulation;}
 .num-f{font-variant-numeric:tabular-nums;}
 
 /* ---------- Top bar ---------- */
@@ -108,7 +109,7 @@ section{animation:fade .22s ease;}
 .dow{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-bottom:6px;}
 .dow span{text-align:center;color:var(--faint);font-size:.66rem;font-weight:700;}
 .dow span:nth-child(n+6){color:var(--muted);}
-.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;touch-action:pan-y;}
+.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;touch-action:pan-y pinch-zoom;}
 .grid.slide-l{animation:slL .22s ease;} .grid.slide-r{animation:slR .22s ease;}
 @keyframes slL{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}
 @keyframes slR{from{opacity:0;transform:translateX(-24px)}to{opacity:1;transform:none}}
@@ -913,7 +914,7 @@ nav.tabbar button.active .pillbg{background:color-mix(in srgb,var(--accent) 22%,
 <script>
 "use strict";
 const STORE_KEY="miturno_v1";
-const VERSION="3.8";
+const VERSION="3.9";
 const MONTHS=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const DOW=["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
 const DOW_S=["D","L","M","X","J","V","S"];
@@ -921,6 +922,7 @@ const DOW_ORDER=[1,2,3,4,5,6,0];
 const PALETTE=["#f5c451","#4ea3f2","#8b7cf8","#3ecf8e","#f2555a","#f2994a","#ec6fcf","#2ec4c4","#a3b18a","#9aa7b8"];
 const TITLES={cal:"Calendario",calc:"Nómina",stats:"Estadísticas",set:"Ajustes"};
 const $=id=>document.getElementById(id);
+const zoomed=()=>(window.visualViewport?window.visualViewport.scale:1)>1.05; // pantalla ampliada con los dedos
 const buzz=(ms=8)=>{try{navigator.vibrate&&navigator.vibrate(ms);}catch(e){}};
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const num=v=>(v===""||v==null)?null:parseFloat(String(v).replace(",","."));
@@ -1175,7 +1177,8 @@ function shiftMonth(n){cur.setMonth(cur.getMonth()+n);buzz(5);refresh(n>0?"l":"r
 $("prevM").onclick=()=>shiftMonth(-1);
 $("nextM").onclick=()=>shiftMonth(1);
 (()=>{let x0=null,y0=null;const g=$("calcard");
-  g.addEventListener("touchstart",e=>{x0=e.touches[0].clientX;y0=e.touches[0].clientY;},{passive:true});
+  // con dos dedos (ampliando) o con la pantalla ampliada no se cambia de mes
+  g.addEventListener("touchstart",e=>{if(e.touches.length>1||zoomed()){x0=null;return;}x0=e.touches[0].clientX;y0=e.touches[0].clientY;},{passive:true});
   g.addEventListener("touchend",e=>{if(x0==null)return;const dx=e.changedTouches[0].clientX-x0,dy=e.changedTouches[0].clientY-y0;
     if(Math.abs(dx)>55&&Math.abs(dy)<45&&!e.target.closest(".paint")) shiftMonth(dx<0?1:-1); x0=null;},{passive:true});
 })();
@@ -1339,8 +1342,9 @@ document.querySelectorAll(".modal:not(.center)").forEach(m=>{
   m.addEventListener("click",e=>{if(e.target===m)closeModal(m.id);});
   // arrastrar hacia abajo para cerrar
   const sh=m.querySelector(".sheet"); let y0=null,dy=0;
-  sh.addEventListener("touchstart",e=>{if(e.target.closest("textarea,input,.chipsel,.patseq")||sh.scrollTop>0){y0=null;return;}y0=e.touches[0].clientY;dy=0;sh.style.transition="none";},{passive:true});
-  sh.addEventListener("touchmove",e=>{if(y0==null)return;dy=Math.max(0,e.touches[0].clientY-y0);sh.style.transform=`translateY(${dy}px)`;},{passive:true});
+  sh.addEventListener("touchstart",e=>{if(e.touches.length>1||zoomed()||e.target.closest("textarea,input,.chipsel,.patseq,.imgpick")||sh.scrollTop>0){
+    if(y0!=null){sh.style.transition="";sh.style.transform="";} y0=null;return;}y0=e.touches[0].clientY;dy=0;sh.style.transition="none";},{passive:true});
+  sh.addEventListener("touchmove",e=>{if(y0==null)return;if(e.touches.length>1){sh.style.transition="";sh.style.transform="";y0=null;return;}dy=Math.max(0,e.touches[0].clientY-y0);sh.style.transform=`translateY(${dy}px)`;},{passive:true});
   sh.addEventListener("touchend",()=>{if(y0==null)return;sh.style.transition="";sh.style.transform="";if(dy>90)closeModal(m.id);y0=null;});
 });
 function ask(title,msg,ok="Aceptar",danger=false){
@@ -1699,7 +1703,7 @@ function closePage(){
 document.querySelectorAll(".page .back").forEach(b=>b.onclick=closePage);
 // deslizar desde el borde izquierdo para volver
 document.querySelectorAll(".page").forEach(pg=>{let x0=null,y0=null;
-  pg.addEventListener("touchstart",e=>{const t=e.touches[0];x0=t.clientX<30?t.clientX:null;y0=t.clientY;},{passive:true});
+  pg.addEventListener("touchstart",e=>{if(e.touches.length>1||zoomed()){x0=null;return;}const t=e.touches[0];x0=t.clientX<30?t.clientX:null;y0=t.clientY;},{passive:true});
   pg.addEventListener("touchend",e=>{if(x0==null)return;const t=e.changedTouches[0];if(t.clientX-x0>80&&Math.abs(t.clientY-y0)<60)closePage();x0=null;},{passive:true});
 });
 let savedT;

@@ -620,7 +620,13 @@ nav.tabbar button.active .pillbg{background:color-mix(in srgb,var(--accent) 22%,
         <label class="field"><span class="lab">Precio por hora trabajada</span><div class="inp"><input id="c-hourly" type="number" inputmode="decimal" step="0.01"><span class="unit">€/h</span></div></label>
         <p class="note" style="margin-top:0">Se multiplica por las horas de tus turnos del mes (menos las salidas anticipadas).</p>
       </div>
-      <label class="field"><span class="lab">Incentivo / variable estimado al mes</span><div class="inp"><input id="c-incent" type="number" inputmode="decimal" step="0.01"><span class="unit">€</span></div></label>
+    </div>
+
+    <div class="section-title">Incentivo</div>
+    <div class="card">
+      <div class="seg" id="incMode"><button data-m="h">Por hora</button><button data-m="d">Por día</button><button data-m="fixed">Fijo</button></div>
+      <label class="field"><span class="lab" id="inc-lab"></span><div class="inp"><input id="c-incent" type="number" inputmode="decimal" step="any"><span class="unit" id="inc-unit">€</span></div></label>
+      <p class="note" id="inc-note" style="margin-top:0"></p>
     </div>
 
     <div class="section-title">Pagas extra</div>
@@ -668,7 +674,7 @@ nav.tabbar button.active .pillbg{background:color-mix(in srgb,var(--accent) 22%,
 <div class="page" id="pg-pluses">
   <div class="phead"><button class="back">‹ Ajustes</button><h2>Pluses</h2><span class="saved">✓ Guardado</span></div>
   <div class="pbody">
-    <p class="note">Cada plus se paga por hora o por turno, en los días y turnos que elijas. Ej.: nocturnidad = por turno, todos los días, turno de noche.</p>
+    <p class="note">Cada plus se paga por hora o por turno, en los días y turnos que elijas. Ej.: nocturnidad = por turno, todos los días, turno de noche.<br><b>Los pluses se suman entre sí:</b> un domingo de noche cobra la nocturnidad y, además, el plus de domingo noche si lo tienes creado.</p>
     <div class="card list" id="plusList"></div>
     <button class="btn" id="addPlus">+ Nuevo plus</button>
   </div>
@@ -832,7 +838,7 @@ nav.tabbar button.active .pillbg{background:color-mix(in srgb,var(--accent) 22%,
 <script>
 "use strict";
 const STORE_KEY="miturno_v1";
-const VERSION="3.1";
+const VERSION="3.2";
 const MONTHS=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const DOW=["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
 const DOW_S=["D","L","M","X","J","V","S"];
@@ -851,7 +857,8 @@ function defShifts(h=8){return [
   {id:"T",name:"Tarde",short:"T",color:"#4ea3f2",start:"14:00",end:"22:00",hours:h,night:false},
   {id:"N",name:"Noche",short:"N",color:"#8b7cf8",start:"22:00",end:"06:00",hours:h,night:true}];}
 function defCfg(){return {
-  payMode:"fixed", fijoMes:1500, hourly:null, incentivoEst:0,
+  payMode:"fixed", fijoMes:1500, hourly:null,
+  incentMode:"h", incentRate:null, incentivoEst:0, // incentivo: por hora trabajada, por día trabajado o fijo
   prorrata:250, prorrataExtra:true, conceptos:[],
   ss:6.5, irpf:15, extraPrice:15,
   pluses:[
@@ -877,6 +884,7 @@ function migrateV1(d){
     {id:"st",name:"Plus sábado tarde",unit:"h",amount:o.st??null,days:[6],fest:false,shifts:["T"]},
     {id:"dn",name:"Plus domingo noche",unit:"h",amount:o.dn??null,days:[0],fest:false,shifts:["N"]}];
   cfg.extraPrice=null;
+  cfg.incentMode="fixed";
   cfg.prog.enabled=true;
   if(Array.isArray(o.progPrices)) cfg.prog.prices=o.progPrices.slice();
   return {v:2,cfg,shifts:defShifts(o.th||8),days:d.days||{},nominas:d.nominas||{},prefs:d.prefs||{},profile:{}};
@@ -885,6 +893,8 @@ function normalize(d){
   d=d||{};
   if(d.v!==2) d=migrateV1(d);
   const dc=defCfg();
+  // quien ya tenía un incentivo fijo guardado (antes de la 3.2) lo conserva como fijo
+  if(d.cfg&&d.cfg.incentMode===undefined) d.cfg.incentMode=d.cfg.incentivoEst?"fixed":"h";
   d.cfg={...dc,...(d.cfg||{})};
   d.cfg.prog={...dc.prog,...(d.cfg.prog||{})};
   if(!Array.isArray(d.cfg.pluses)) d.cfg.pluses=dc.pluses;
@@ -981,8 +991,10 @@ function computeMonth(y,m,incentivoOverride){
   const base=c.payMode==="hourly"?(c.hourly||0)*Math.max(0,a.hours-a.lessH):(c.fijoMes||0);
   const conc=c.conceptos.reduce((s,x)=>s+(x.amount||0),0);
   const prorrata=c.prorrata||0;
-  // incentivo variable (no se puede predecir; se toma del recibo o estimado)
-  const incentivo=(incentivoOverride!=null)?incentivoOverride:(c.incentivoEst||0);
+  // incentivo: según las horas o días trabajados del calendario, o fijo; si se da el del recibo, manda ese
+  const incHours=Math.max(0,a.hours-a.lessH);
+  const incCalc=c.incentMode==="h"?(c.incentRate||0)*incHours:c.incentMode==="d"?(c.incentRate||0)*a.dias:(c.incentivoEst||0);
+  const incentivo=(incentivoOverride!=null)?incentivoOverride:incCalc;
   const extraB=(c.extraPrice||0)*a.extraH;
   const brutoTotal=base+conc+prorrata+incentivo+a.plus+extraB+a.progB;
   // Si la prorrata se cobra en las pagas extra, no entra en el IRPF del mes ni en el líquido
@@ -991,10 +1003,21 @@ function computeMonth(y,m,incentivoOverride){
   const ss=brutoTotal*((c.ss||0)/100);
   const irpf=baseIrpf*((c.irpf||0)/100);
   const neto=baseIrpf-ss-irpf;
-  return {base,conc,prorrata,fuera,incentivo,extraB,plusBy:a.plusBy,progB:a.progB,brutoTotal,ss,irpf,neto,
+  return {base,conc,prorrata,fuera,incentivo,incHours,extraB,plusBy:a.plusBy,progB:a.progB,brutoTotal,ss,irpf,neto,
     extras:a.plus+extraB+a.progB,stats:a};
 }
 function pendingPluses(){return data.cfg.pluses.filter(p=>p.amount==null);}
+function pendingNames(){
+  const n=pendingPluses().map(p=>p.name);
+  if(data.cfg.incentMode!=="fixed"&&data.cfg.incentRate==null) n.unshift("Incentivo");
+  return n;
+}
+function incentDesc(r){
+  const c=data.cfg, rate=c.incentRate==null?"sin precio":eur(c.incentRate);
+  if(c.incentMode==="h") return `${fmtH(r.incHours)} trabajadas × ${rate}`;
+  if(c.incentMode==="d") return `${r.stats.dias} días trabajados × ${rate}`;
+  return "importe fijo estimado";
+}
 
 // ---- Theme ----
 const mq=window.matchMedia("(prefers-color-scheme: dark)");
@@ -1106,9 +1129,9 @@ function renderSummary(){
   $("hero-bruto").textContent=eur(r.brutoTotal,0);
   $("hero-extras").textContent=eur(r.extras,0);
   $("hero-horas").textContent=(s.hours+s.extraH-s.lessH).toLocaleString("es-ES",{maximumFractionDigits:1});
-  const pend=pendingPluses();
+  const pend=pendingNames();
   $("hero-warn").classList.toggle("hidden",!pend.length);
-  if(pend.length) $("hero-warn").textContent=`⚠ Falta el precio de: ${pend.map(p=>p.name).join(", ")}`;
+  if(pend.length) $("hero-warn").textContent=`⚠ Falta el precio de: ${pend.join(", ")}`;
 }
 
 function renderUpcoming(){
@@ -1328,7 +1351,7 @@ function renderCalc(){
   else rows.push(["l","Salario fijo","",r.base]);
   c.conceptos.forEach(x=>rows.push(["l",esc(x.name)||"Concepto","fijo mensual",x.amount||0]));
   if(r.prorrata) rows.push(["l","Prorrata pagas extra",c.prorrataExtra?"se cobra en las pagas extra":"se cobra cada mes",r.prorrata]);
-  rows.push(["l","Incentivo","estimado · edítalo en salario",r.incentivo]);
+  rows.push(["l","Incentivo",incentDesc(r),r.incentivo]);
   c.pluses.forEach(p=>rows.push(["l",esc(p.name),esc(plusDesc(p)),r.plusBy[p.id]||0]));
   if(s.extraH||c.extraPrice) rows.push(["l","Horas extra",`${fmtH(s.extraH)} × ${c.extraPrice==null?"sin precio":eur(c.extraPrice)}`,r.extraB]);
   if(c.prog.enabled) rows.push(["l",esc(c.prog.name),`${s.prog} ${s.prog===1?"turno":"turnos"} este mes`,r.progB]);
@@ -1406,8 +1429,25 @@ function runCompare(store){
   if(j.probs.length) html+=`<ul class="probs">${j.probs.map(p=>`<li>${p.t}</li>`).join("")}</ul>`;
   html+=`<table class="cmp num-f"><tr><th>Concepto</th><th>Estimado</th><th>Nómina</th><th>Dif.</th></tr>`;
   html+=cmpRow("Bruto",r.brutoTotal,rec.dev)+cmpRow("Seg. Social",r.ss,rec.ss)+cmpRow("IRPF",r.irpf,rec.irpf)+cmpRow("Líquido",r.neto,rec.liq);
-  html+=`</table><p class="note">El cálculo es una estimación para pillar errores gordos. Diferencias de pocos euros suelen ser pluses o redondeos del convenio, no errores.</p></div>`;
+  html+=`</table>`;
+  // con el incentivo del recibo y los turnos del calendario sacamos el precio real por hora / día
+  let rateH=null, rateD=null;
+  if(rec.incent!=null&&r.stats.dias){
+    rateH=r.incHours?Math.round(rec.incent/r.incHours*10000)/10000:null;
+    rateD=Math.round(rec.incent/r.stats.dias*100)/100;
+    html+=`<div class="warnbox" style="color:var(--ink);border-color:var(--line);background:var(--surface2);margin-top:12px">
+      <b>Tu incentivo real:</b> ${eur(rec.incent)} entre ${fmtH(r.incHours)} trabajadas = <b>${rateH!=null?rateH.toLocaleString("es-ES",{maximumFractionDigits:4})+" €/h":"—"}</b>
+      (${eur(rateD)} por día, ${r.stats.dias} días).
+      <button class="btn sec" id="useRateH" style="margin-top:8px">Usar ${rateH!=null?rateH.toLocaleString("es-ES",{maximumFractionDigits:4}):"—"} €/h para calcular</button>
+      <p class="note" style="margin:8px 0 0">Si tu empresa paga el incentivo con un mes de retraso, compara con el recibo del mes siguiente al de los turnos.</p></div>`;
+  }
+  html+=`<p class="note">El cálculo es una estimación para pillar errores gordos. Diferencias de pocos euros suelen ser pluses o redondeos del convenio, no errores.</p></div>`;
   $("comp-result").innerHTML=html;
+  if($("useRateH")) $("useRateH").onclick=()=>{
+    if(rateH==null) return;
+    data.cfg.incentMode="h"; data.cfg.incentRate=rateH; save(); buzz(12);
+    toast(`Incentivo: ${rateH.toLocaleString("es-ES",{maximumFractionDigits:4})} €/h`); runCompare(false);
+  };
   if(store) setTimeout(()=>$("comp-result").scrollIntoView({behavior:"smooth",block:"start"}),50);
 }
 function cmpRow(lab,esp,real){
@@ -1554,7 +1594,17 @@ function renderSalario(){
   mode();
   bindNum("c-fijo",()=>c.fijoMes,v=>c.fijoMes=v);
   bindNum("c-hourly",()=>c.hourly,v=>c.hourly=v);
-  bindNum("c-incent",()=>c.incentivoEst,v=>c.incentivoEst=v);
+  const inc=()=>{
+    const m=c.incentMode, fixed=m==="fixed";
+    document.querySelectorAll("#incMode button").forEach(b=>b.classList.toggle("on",b.dataset.m===m));
+    $("inc-lab").textContent=m==="h"?"Precio por hora trabajada":m==="d"?"Precio por día trabajado":"Importe fijo al mes";
+    $("inc-unit").textContent=m==="h"?"€/h":m==="d"?"€/día":"€";
+    $("inc-note").textContent=fixed?"Si no cobras incentivo, deja 0."
+      :`Se multiplica por ${m==="h"?"las horas":"los días"} que marques en el calendario. Si no sabes el precio, mete el incentivo de un recibo en Nómina → Comparar y la app te lo calcula.`;
+    bindNum("c-incent",()=>fixed?c.incentivoEst:c.incentRate,v=>{if(fixed)c.incentivoEst=v;else c.incentRate=v;});
+  };
+  document.querySelectorAll("#incMode button").forEach(b=>b.onclick=()=>{c.incentMode=b.dataset.m;inc();changed();buzz();});
+  inc();
   bindNum("c-prorrata",()=>c.prorrata,v=>c.prorrata=v);
   bindCheck("c-prorrataExtra",()=>c.prorrataExtra,v=>c.prorrataExtra=v);
   bindNum("c-extra",()=>c.extraPrice,v=>c.extraPrice=v);
